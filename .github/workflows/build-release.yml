@@ -19,21 +19,21 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install MinGW-w64 using msys2
-        uses: msys2/setup-msys2@v2
+      - name: Setup MinGW-w64
+        uses: catalystci/setup-mingw@v1
         with:
-          msystem: mingw64
-          install: >-
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-gcc-static
-            mingw-w64-x86_64-runtime
+          version: 13.2.0
 
       - name: Compile StarServices
-        shell: msys2 {0}
         run: |
           echo "Compiling StarServices.c..."
           gcc -o StarServices.exe StarServices.c -ladvapi32 -lkernel32 -static-libgcc -static -s -O2
           echo "Compilation complete!"
+
+      - name: Verify GCC Installation
+        run: |
+          gcc --version
+          echo "GCC installed successfully!"
 
       - name: Verify Executable
         shell: powershell
