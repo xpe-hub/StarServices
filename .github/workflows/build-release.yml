@@ -19,17 +19,24 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install MinGW-w64 using winget
+      - name: Check for existing GCC
         run: |
-          Write-Host "Installing MinGW-w64 via winget..." -ForegroundColor Cyan
-          winget install -e --id MinGW.MinGW-W64-x86_64 --source winget
-          Write-Host "MinGW-w64 installed successfully!" -ForegroundColor Green
-
-      - name: Add MinGW to PATH
-        run: |
-          $env:PATH = "C:\Program Files\mingw-w64\x86_64-13.2.0-release-win32-seh-ucrt-rt_v11-rev1\mingw64\bin;$env:PATH"
-          echo "C:\Program Files\mingw-w64\x86_64-13.2.0-release-win32-seh-ucrt-rt_v11-rev1\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          Write-Host "MinGW added to PATH" -ForegroundColor Green
+          Write-Host "Checking for existing GCC..." -ForegroundColor Cyan
+          $gccPath = (Get-Command gcc -ErrorAction SilentlyContinue)
+          if ($gccPath) {
+              Write-Host "GCC found at: $($gccPath.Source)" -ForegroundColor Green
+              gcc --version
+          } else {
+              Write-Host "GCC not found, attempting to install..." -ForegroundColor Yellow
+              
+              # Try chocolatey as fallback
+              choco install mingw -y --version 13.2.0
+              refreshenv
+              
+              # Add to PATH
+              $env:PATH = "C:\ProgramData\Chocolatey\lib\mingw\tools\mingw64\bin;$env:PATH"
+              echo "C:\ProgramData\Chocolatey\lib\mingw\tools\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          }
 
       - name: Verify GCC Installation
         run: |
