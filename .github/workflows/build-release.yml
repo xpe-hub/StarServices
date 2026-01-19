@@ -19,24 +19,20 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install MinGW-w64 using Chocolatey
-        run: |
-          choco install mingw -y --version 13.2.0
-          refreshenv
-
-      - name: Add MinGW to PATH
-        run: |
-          echo "C:\Program Data\Chocolatey\lib\mingw\tools\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Verify GCC Installation
-        run: |
-          gcc --version
-          echo "GCC installed successfully!"
+      - name: Install MinGW-w64 using msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: mingw64
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-gcc-static
+            mingw-w64-x86_64-runtime
 
       - name: Compile StarServices
+        shell: msys2 {0}
         run: |
           echo "Compiling StarServices.c..."
-          gcc -o StarServices.exe StarServices.c -ladvapi32 -lkernel32 -static -s -O2
+          gcc -o StarServices.exe StarServices.c -ladvapi32 -lkernel32 -static-libgcc -static -s -O2
           echo "Compilation complete!"
 
       - name: Verify Executable
