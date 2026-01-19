@@ -182,7 +182,7 @@ BOOL IsAdmin(void) {
  * Uses OpenSCManagerA from ADVAPI32.dll
  * Required first step for any service operation
  */
-SC_HANDLE OpenSCManager(void) {
+SC_HANDLE OpenSCManagerWrapper(void) {
     /* Open SCManager with all access - based on KellerServices analysis */
     return OpenSCManagerA(NULL, NULL, SC_MANAGER_ALL_ACCESS);
 }
@@ -220,7 +220,8 @@ BOOL GetServiceStatusEx(SC_HANDLE hService, SERVICE_STATUS* pStatus) {
  * Found in KellerServices.exe imports
  */
 BOOL GetServiceStatusExEx(SC_HANDLE hService, SERVICE_STATUS* pStatus) {
-    return QueryServiceStatusEx(hService, pStatus);
+    DWORD bytesNeeded;
+    return QueryServiceStatusEx(hService, SC_STATUS_TYPE_INFO, (LPBYTE)pStatus, sizeof(SERVICE_STATUS), &bytesNeeded);
 }
 
 /*
@@ -520,7 +521,7 @@ void ProcessServices(void) {
     PrintSpace();
 
     /* Open Service Control Manager */
-    hSCManager = OpenSCManager();
+    hSCManager = OpenSCManagerWrapper();
 
     if (hSCManager == NULL) {
         SetColor(COLOR_RED);
