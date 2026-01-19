@@ -221,7 +221,7 @@ BOOL GetServiceStatusEx(SC_HANDLE hService, SERVICE_STATUS* pStatus) {
  */
 BOOL GetServiceStatusExEx(SC_HANDLE hService, SERVICE_STATUS* pStatus) {
     DWORD bytesNeeded;
-    return QueryServiceStatusEx(hService, SC_STATUS_TYPE_INFO, (LPBYTE)pStatus, sizeof(SERVICE_STATUS), &bytesNeeded);
+    return QueryServiceStatusEx(hService, SC_STATUS_PROCESS_INFO, (LPBYTE)pStatus, sizeof(SERVICE_STATUS), &bytesNeeded);
 }
 
 /*
