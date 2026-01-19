@@ -46,8 +46,13 @@ jobs:
       - name: Compile StarServices
         run: |
           Write-Host "Compiling StarServices.c..." -ForegroundColor Cyan
-          gcc -o StarServices.exe StarServices.c -ladvapi32 -lkernel32 -static-libgcc -static -s -O2
-          Write-Host "Compilation complete!" -ForegroundColor Green
+          gcc -v -o StarServices.exe StarServices.c -ladvapi32 -lkernel32 2>&1 | Out-String
+          if ($LASTEXITCODE -eq 0) {
+              Write-Host "Compilation complete!" -ForegroundColor Green
+          } else {
+              Write-Host "Compilation failed!" -ForegroundColor Red
+              exit 1
+          }
 
       - name: Verify Executable
         shell: powershell
