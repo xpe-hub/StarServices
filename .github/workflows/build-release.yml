@@ -65,9 +65,11 @@ jobs:
               $file = Get-Item "StarServices.exe"
               Write-Host "File size: $($file.Length / 1KB) KB" -ForegroundColor Yellow
               
+              # Read enough bytes to get PE header info (at least 128 bytes)
+              $bytes = Get-Content "StarServices.exe" -Encoding Byte -ReadCount 128 -TotalCount 128
+              
               # Check PE header (MZ = 4D 5A)
-              $bytes = Get-Content "StarServices.exe" -Encoding Byte -TotalCount 2
-              $hex = [System.BitConverter]::ToString($bytes)
+              $hex = [System.BitConverter]::ToString($bytes[0..1])
               
               if ($hex -eq "4D-5A") {
                   Write-Host "[OK] Valid PE header detected (MZ)" -ForegroundColor Green
@@ -76,15 +78,24 @@ jobs:
                   exit 1
               }
               
-              # Check if it's 64-bit
+              # Read PE offset from bytes 60-63
               $peOffset = [System.BitConverter]::ToInt32($bytes[60..63], 0)
-              $machineBytes = Get-Content "StarServices.exe" -Encoding Byte -ReadCount 4 -Start ($peOffset + 4)
-              $machineType = [System.BitConverter]::ToInt16($machineBytes, 0)
+              Write-Host "PE offset: $peOffset" -ForegroundColor Yellow
               
-              if ($machineType -eq 8664) {
-                  Write-Host "[OK] 64-bit executable (x86-64)" -ForegroundColor Green
-              } elseif ($machineType -eq 332) {
-                  Write-Host "[OK] 32-bit executable (x86)" -ForegroundColor Yellow
+              # Read machine type from PE header + 4
+              if ($peOffset + 4 -lt $bytes.Length) {
+                  $machineBytes = $bytes[($peOffset + 4)..($peOffset + 5)]
+                  $machineType = [System.BitConverter]::ToInt16($machineBytes, 0)
+                  
+                  if ($machineType -eq 8664) {
+                      Write-Host "[OK] 64-bit executable (x86-64)" -ForegroundColor Green
+                  } elseif ($machineType -eq 332) {
+                      Write-Host "[OK] 32-bit executable (x86)" -ForegroundColor Yellow
+                  } else {
+                      Write-Host "[?] Unknown architecture (machine type: $machineType)" -ForegroundColor Yellow
+                  }
+              } else {
+                  Write-Host "[?] Could not determine architecture" -ForegroundColor Yellow
               }
               
           } else {
