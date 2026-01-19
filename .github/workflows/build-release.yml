@@ -1,0 +1,185 @@
+name: Build and Release StarServices
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags like v1.0.0
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., 1.0.0)'
+        required: false
+        default: ''
+
+jobs:
+  build:
+    name: Compile StarServices.exe
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      attestations: write
+      id-token: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup MinGW-w64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: |
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-gcc-core
+            mingw-w64-x86_64-binutils
+
+      - name: Compile StarServices
+        shell: msys2 {0}
+        run: |
+          echo "Compiling StarServices.c..."
+          gcc -o StarServices.exe StarServices.c -ladvapi32 -lkernel32 -static -s -O2
+          echo "Compilation complete!"
+
+      - name: Verify Executable
+        shell: powershell
+        run: |
+          Write-Host "=== Verifying StarServices.exe ===" -ForegroundColor Cyan
+          
+          # Check if file exists
+          if (Test-Path "StarServices.exe") {
+              Write-Host "[OK] StarServices.exe created successfully" -ForegroundColor Green
+              
+              # Get file info
+              $file = Get-Item "StarServices.exe"
+              Write-Host "File size: $($file.Length / 1KB) KB" -ForegroundColor Yellow
+              
+              # Check PE header (MZ = 4D 5A)
+              $bytes = Get-Content "StarServices.exe" -Encoding Byte -TotalCount 2
+              $hex = [System.BitConverter]::ToString($bytes)
+              
+              if ($hex -eq "4D-5A") {
+                  Write-Host "[OK] Valid PE header detected (MZ)" -ForegroundColor Green
+              } else {
+                  Write-Host "[ERROR] Invalid file format" -ForegroundColor Red
+                  exit 1
+              }
+              
+              # Check if it's 64-bit
+              $peOffset = [System.BitConverter]::ToInt32($bytes[60..63], 0)
+              $machineBytes = Get-Content "StarServices.exe" -Encoding Byte -ReadCount 4 -Start ($peOffset + 4)
+              $machineType = [System.BitConverter]::ToInt16($machineBytes, 0)
+              
+              if ($machineType -eq 8664) {
+                  Write-Host "[OK] 64-bit executable (x86-64)" -ForegroundColor Green
+              } elseif ($machineType -eq 332) {
+                  Write-Host "[OK] 32-bit executable (x86)" -ForegroundColor Yellow
+              }
+              
+          } else {
+              Write-Host "[ERROR] StarServices.exe not found!" -ForegroundColor Red
+              exit 1
+          }
+          
+          Write-Host "=== Verification Complete ===" -ForegroundColor Cyan
+
+      - name: Generate Attestation
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: 'StarServices.exe'
+
+      - name: Upload Artifact (for manual builds)
+        uses: actions/upload-artifact@v4
+        with:
+          name: StarServices-Windows
+          path: StarServices.exe
+          retention-days: 7
+          compression-level: 9
+
+  release:
+    name: Create Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: StarServices-Windows
+          path: release
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/StarServices.exe
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          name: StarServices Release
+          body: |
+            ## StarServices - Tournament Anti-Cheat Service Manager
+            
+            Automated Windows executable compilation.
+            
+            ### Files
+            - StarServices.exe
+            
+            ### Build Info
+            - Compiled from: ${{ github.sha }}
+            - Runner: Windows Latest
+            - Compiler: MinGW-w64 GCC
+            
+            ### Usage
+            1. Download StarServices.exe
+            2. Right-click > Run as administrator
+            3. The tool will activate all required services automatically
+            
+            Copyright (c) 2025-2030 xpe.nettt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: List Release Assets
+        run: |
+          echo "=== Release Created Successfully ==="
+          gh release view --json assets -q '.assets[].name' || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  verify-release:
+    name: Verify Release
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Get Release Info
+        id: release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: release } = await github.rest.repos.getRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: context.payload.release.id
+            });
+            console.log('Release:', release.name);
+            console.log('Tag:', release.tag_name);
+            console.log('Assets:', release.assets.map(a => a.name));
+            return release;
+
+      - name: Display Release Summary
+        run: |
+          echo "=== StarServices Release Summary ==="
+          echo "Version: ${{ steps.release.outputs.result.tag_name }}"
+          echo "Release URL: ${{ github.server_url }}/${{ github.repository }}/releases/${{ github.event.release.id }}"
+          echo ""
+          echo "The executable has been compiled and uploaded successfully!"
+          echo ""
+          echo "Next steps:"
+          echo "1. Go to the Releases page"
+          echo "2. Download StarServices.exe"
+          echo "3. Run as administrator on Windows"
