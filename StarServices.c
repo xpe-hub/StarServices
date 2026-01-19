@@ -2,8 +2,7 @@
  * ╔══════════════════════════════════════════════════════════════════════════════╗
  * ║                                                                              ║
  * ║                          STAR SERVICES                                       ║
- * ║                                                                              ║
- * ║                         Star Cup System                                      ║
+ * ║                         ORG STAR CUP                                         ║
  * ║                                                                              ║
  * ║    Author: Star                                                             ║
  * ║    Copyright (c) 2025-2030 Star Cup                                         ║
@@ -48,23 +47,13 @@ static const char* services[TOTAL_SERVICES] = {
 };
 
 static const char* service_display[TOTAL_SERVICES] = {
-    "Program Compatibility Assistant",
-    "Plug and Play",
-    "Diagnostic Policy Service",
-    "Telemetry and Experiences",
-    "Superfetch",
-    "Windows Event Log",
-    "System Monitor"
-};
-
-static const char* service_desc[TOTAL_SERVICES] = {
-    "Servicio de compatibilidad de programas",
-    "Administrador de dispositivos",
-    "Servicio de politicas de diagnostico",
-    "Experiencias y telemetria",
-    "Optimizacion de memoria y rendimiento",
-    "Registro de eventos de Windows",
-    "Monitor del sistema"
+    "PROGRAM COMPATIBILITY ASSISTANT",
+    "PLUG AND PLAY",
+    "DIAGNOSTIC POLICY SERVICE",
+    "TELEMETRY AND EXPERIENCES",
+    "SUPERFETCH",
+    "WINDOWS EVENT LOG",
+    "SYSTEM MONITOR"
 };
 
 /* ==================== GLOBAL VARIABLES ==================== */
@@ -80,26 +69,6 @@ void SetColor(int color) {
     if (hConsole != NULL) {
         SetConsoleTextAttribute(hConsole, color);
     }
-}
-
-void PrintLine(void) {
-    SetColor(COLOR_WHITE);
-    printf("\n");
-    printf("                                                                              ");
-    printf("\n");
-    SetColor(COLOR_DEFAULT);
-}
-
-void PrintSeparator(void) {
-    SetColor(COLOR_CYAN);
-    printf("\n");
-    printf("                                                                              ");
-    printf("\n");
-    SetColor(COLOR_DEFAULT);
-}
-
-void PrintSpace(void) {
-    printf("\n");
 }
 
 void ClearScreen(void) {
@@ -133,6 +102,26 @@ BOOL DownloadFile(const char* url, const char* outputPath) {
     return SUCCEEDED(hr);
 }
 
+BOOL ExtractZip(const char* zipPath, const char* destPath) {
+    char command[1024];
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+    
+    sprintf(command, "powershell -Command \"Expand-Archive -Path '%s' -DestinationPath '%s' -Force\"", zipPath, destPath);
+    
+    memset(&si, 0, sizeof(si));
+    memset(&pi, 0, sizeof(pi));
+    si.cb = sizeof(si);
+    
+    if (CreateProcessA(NULL, command, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
+        WaitForSingleObject(pi.hProcess, 60000);
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+        return TRUE;
+    }
+    return FALSE;
+}
+
 BOOL InstallSysmon(void) {
     SC_HANDLE hSCManager = NULL;
     SC_HANDLE hService = NULL;
@@ -143,9 +132,6 @@ BOOL InstallSysmon(void) {
     PROCESS_INFORMATION pi;
     DWORD exitCode;
     
-    GetSystemDirectoryA(sysmonPath, MAX_PATH);
-    strcat(sysmonPath, "\\sysmon.exe");
-    
     /* Check if Sysmon is already installed */
     hSCManager = OpenSCManagerA(NULL, NULL, SC_MANAGER_ALL_ACCESS);
     if (hSCManager != NULL) {
@@ -153,16 +139,18 @@ BOOL InstallSysmon(void) {
         if (hService != NULL) {
             CloseServiceHandle(hService);
             CloseServiceHandle(hSCManager);
-            return TRUE; /* Already installed */
+            sysmon_installed = 1;
+            return TRUE;
         }
         CloseServiceHandle(hSCManager);
     }
     
+    GetSystemDirectoryA(sysmonPath, MAX_PATH);
+    
     /* Download Sysmon */
-    SetColor(COLOR_CYAN);
+    SetColor(COLOR_GREEN);
     printf("\n");
-    printf("  DESCARGANDO SYSMON...\n");
-    printf("  Por favor espera un momento...\n");
+    printf("  [INSTALANDO] SYSMON - POR FAVOR ESPERA...\n");
     SetColor(COLOR_DEFAULT);
     
     char tempPath[MAX_PATH];
@@ -172,62 +160,62 @@ BOOL InstallSysmon(void) {
     
     if (!DownloadFile("https://download.sysinternals.com/files/Sysmon.zip", sysmonZip)) {
         SetColor(COLOR_RED);
-        printf("  [ERROR] No se pudo descargar Sysmon\n");
+        printf("  [ERRO] FALHA AO BAIXAR SYSMON\n");
         SetColor(COLOR_DEFAULT);
         return FALSE;
     }
     
-    /* Extract Sysmon */
-    SetColor(COLOR_CYAN);
-    printf("  EXTRACTENDO ARCHIVOS...\n");
-    SetColor(COLOR_DEFAULT);
+    /* Extract and install Sysmon */
+    char extractPath[MAX_PATH];
+    sprintf(extractPath, "%ssysmon_temp", tempPath);
+    CreateDirectoryA(extractPath, NULL);
     
-    char extractCmd[MAX_PATH * 3];
-    sprintf(extractCmd, "powershell -Command \"Expand-Archive -Path '%s' -DestinationPath '%ssysmon_temp -Force\"", sysmonZip, tempPath);
+    ExtractZip(sysmonZip, extractPath);
     
-    memset(&si, 0, sizeof(si));
-    memset(&pi, 0, sizeof(pi));
-    si.cb = sizeof(si);
+    /* Find Sysmon.exe in extracted files */
+    char sysmonExe[MAX_PATH];
+    char searchCmd[MAX_PATH * 2];
+    sprintf(searchCmd, "dir /b \"%s\\Sysmon*.exe\" 2>nul", extractPath);
     
-    if (CreateProcessA(NULL, extractCmd, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
-        WaitForSingleObject(pi.hProcess, INFINITE);
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
-    }
-    
-    /* Copy Sysmon to System32 */
-    char sysmonTemp[MAX_PATH];
-    sprintf(sysmonTemp, "%ssysmon_temp\\Sysmon.exe", tempPath);
-    
-    if (CopyFileA(sysmonTemp, sysmonPath, FALSE)) {
-        /* Install Sysmon with accept eula */
-        sprintf(command, "\"%s\" -accepteula -i", sysmonPath);
-        
-        memset(&si, 0, sizeof(si));
-        memset(&pi, 0, sizeof(pi));
-        si.cb = sizeof(si);
-        
-        SetColor(COLOR_CYAN);
-        printf("  INSTALANDO SYSMON...\n");
-        SetColor(COLOR_DEFAULT);
-        
-        if (CreateProcessA(NULL, command, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
-            WaitForSingleObject(pi.hProcess, 30000);
-            GetExitCodeProcess(pi.hProcess, &exitCode);
-            CloseHandle(pi.hProcess);
-            CloseHandle(pi.hThread);
+    FILE* pipe = _popen(searchCmd, "r");
+    if (pipe != NULL) {
+        char buffer[256];
+        if (fgets(buffer, sizeof(buffer), pipe) != NULL) {
+            /* Remove newline */
+            buffer[strcspn(buffer, "\r\n")] = 0;
+            sprintf(sysmonExe, "%s\\%s", extractPath, buffer);
             
-            if (exitCode == 0) {
-                result = TRUE;
-                sysmon_installed = 1;
+            /* Copy to System32 */
+            char destPath[MAX_PATH];
+            sprintf(destPath, "%s\\Sysmon.exe", sysmonPath);
+            CopyFileA(sysmonExe, destPath, FALSE);
+            
+            /* Install with accept eula */
+            sprintf(command, "\"%s\" -accepteula -i", destPath);
+            
+            memset(&si, 0, sizeof(si));
+            memset(&pi, 0, sizeof(pi));
+            si.cb = sizeof(si);
+            
+            if (CreateProcessA(NULL, command, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
+                WaitForSingleObject(pi.hProcess, 30000);
+                GetExitCodeProcess(pi.hProcess, &exitCode);
+                CloseHandle(pi.hProcess);
+                CloseHandle(pi.hThread);
                 
-                /* Cleanup */
-                char cleanupCmd[MAX_PATH * 2];
-                sprintf(cleanupCmd, "rmdir /s /q \"%ssysmon_temp\" & del \"%s\"", tempPath, sysmonZip);
-                system(cleanupCmd);
+                if (exitCode == 0) {
+                    result = TRUE;
+                    sysmon_installed = 1;
+                }
             }
         }
+        _pclose(pipe);
     }
+    
+    /* Cleanup */
+    char cleanupCmd[MAX_PATH * 3];
+    sprintf(cleanupCmd, "rmdir /s /q \"%s\" & del \"%s\"", extractPath, sysmonZip);
+    system(cleanupCmd);
     
     return result;
 }
@@ -249,11 +237,6 @@ void CloseServiceHandleSafe(SC_HANDLE hService) {
 
 BOOL GetServiceStatusEx(SC_HANDLE hService, SERVICE_STATUS* pStatus) {
     return QueryServiceStatus(hService, pStatus);
-}
-
-BOOL GetServiceStatusExEx(SC_HANDLE hService, SERVICE_STATUS* pStatus) {
-    DWORD bytesNeeded;
-    return QueryServiceStatusEx(hService, SC_STATUS_PROCESS_INFO, (LPBYTE)pStatus, sizeof(SERVICE_STATUS), &bytesNeeded);
 }
 
 BOOL StartServiceByName(SC_HANDLE hSCManager, const char* serviceName) {
@@ -340,129 +323,84 @@ BOOL ServiceExists(SC_HANDLE hSCManager, const char* serviceName) {
     return exists;
 }
 
-const char* GetServiceStatusString(DWORD state) {
-    switch (state) {
-        case SERVICE_STOPPED:
-            return "DETENIDO";
-        case SERVICE_START_PENDING:
-            return "INICIANDO...";
-        case SERVICE_STOP_PENDING:
-            return "DETENIENDO...";
-        case SERVICE_RUNNING:
-            return "EJECUTANDOSE";
-        case SERVICE_CONTINUE_PENDING:
-            return "REANUDANDO...";
-        case SERVICE_PAUSE_PENDING:
-            return "PAUSANDO...";
-        case SERVICE_PAUSED:
-            return "PAUSADO";
-        default:
-            return "DESCONOCIDO";
-    }
-}
-
 /* ==================== PRINT FUNCTIONS ==================== */
 void PrintHeader(void) {
     ClearScreen();
     
-    SetColor(COLOR_CYAN);
-    printf("\n");
-    printf("                                                                              ");
-    printf("\n");
-    printf("                                                                              ");
-    printf("\n");
-    
     SetColor(COLOR_WHITE);
-    printf("                              STAR SERVICES                                    ");
     printf("\n");
-    
-    SetColor(COLOR_CYAN);
-    printf("                              STAR CUP SYSTEM                                  ");
-    printf("\n");
-    
-    printf("                                                                              ");
-    printf("\n");
-    printf("                                                                              ");
-    printf("\n");
+    printf("  ===============================================================================\n");
+    printf("                                                                              \n");
+    printf("                         STAR SERVICES - ORG STAR CUP                        \n");
+    printf("                                                                              \n");
+    printf("  ===============================================================================\n");
     SetColor(COLOR_DEFAULT);
 }
 
 void PrintAdminWarning(void) {
     SetColor(COLOR_RED);
     printf("\n");
-    printf("                      [X] ERROR: SE REQUIEREN PRIVILEGIOS DE ADMINISTRADOR\n");
+    printf("  [X] ERRO: PRIVILEGIOS DE ADMINISTRADOR NECESARIOS!\n");
     printf("\n");
     SetColor(COLOR_YELLOW);
-    printf("                      Para ejecutar correctamente:\n");
-    printf("                      1. Cierra este programa\n");
-    printf("                      2. Clic derecho en el archivo .exe\n");
-    printf("                      3. Selecciona 'Ejecutar como administrador'\n");
+    printf("  PARA EJECUTAR CORRECTAMENTE:\n");
+    printf("  1. CIERRA ESTE PROGRAMA\n");
+    printf("  2. CLIC DERECHO EN EL ARCHIVO .EXE\n");
+    printf("  3. SELECCIONA 'EJECUTAR COMO ADMINISTRADOR'\n");
     printf("\n");
     SetColor(COLOR_GREEN);
-    printf("                      Presiona cualquier tecla para salir...\n");
+    printf("  PRESIONA CUALQUIER TECLA PARA SALIR...\n");
     SetColor(COLOR_DEFAULT);
     getchar();
 }
 
-void PrintServiceStatus(int index, const char* name, const char* displayName,
-                        const char* desc, BOOL success, BOOL exists) {
-    
-    if (!exists) {
-        SetColor(COLOR_YELLOW);
-        printf("  [?] %-12s NO ENCONTRADO", name);
-        SetColor(COLOR_DEFAULT);
-        printf("  %s\n", desc);
-    } else if (success) {
-        SetColor(COLOR_GREEN);
-        printf("  [OK] %-12s ACTIVADO", name);
-        SetColor(COLOR_DEFAULT);
-        printf("  %s\n", displayName);
-        services_started++;
-    } else {
-        SetColor(COLOR_RED);
-        printf("  [!] %-12s ERROR", name);
-        SetColor(COLOR_DEFAULT);
-        printf("  %s\n", displayName);
-        services_failed++;
+void PrintSectionTitle(const char* title) {
+    printf("\n");
+    SetColor(COLOR_WHITE);
+    printf("  %s\n", title);
+    SetColor(COLOR_DEFAULT);
+}
+
+void PrintSeparator(void) {
+    SetColor(COLOR_WHITE);
+    printf("  ");
+    for (int i = 0; i < 76; i++) {
+        printf("=");
     }
+    printf("\n");
+    SetColor(COLOR_DEFAULT);
+}
+
+void PrintServiceStatus(const char* name, const char* status, const char* message) {
+    SetColor(COLOR_GREEN);
+    printf("  [%-10s] %s %s\n", status, name, message);
+    SetColor(COLOR_DEFAULT);
+}
+
+void PrintServiceError(const char* name, const char* message) {
+    SetColor(COLOR_RED);
+    printf("  [%-10s] %s %s\n", "ERRO", name, message);
+    SetColor(COLOR_DEFAULT);
 }
 
 void PrintSummary(void) {
+    printf("\n");
     PrintSeparator();
-    PrintSpace();
     
     SetColor(COLOR_WHITE);
-    printf("                           RESUMEN DE OPERACION                               ");
-    PrintSpace();
-    PrintSpace();
-    
-    SetColor(COLOR_GREEN);
-    printf("                           [+] Servicios iniciados: %d\n", services_started);
-    if (services_already_running > 0) {
-        SetColor(COLOR_BLUE);
-        printf("                           [i] Ya estaban activos: %d\n", services_already_running);
-    }
-    SetColor(COLOR_RED);
-    printf("                           [-] Servicios con error: %d\n", services_failed);
-    SetColor(COLOR_YELLOW);
-    printf("                           [?] No encontrados: %d\n", services_not_found);
-    PrintSpace();
-    
-    if (services_failed == 0 && services_not_found == 0) {
-        SetColor(COLOR_GREEN);
-        printf("                    [SUCCESS] Todos los servicios fueron activados!         ");
-        PrintSpace();
-    }
+    printf("  RESUMO DA ATIVACAO\n");
+    SetColor(COLOR_DEFAULT);
     
     PrintSeparator();
-    PrintSpace();
     
-    SetColor(COLOR_CYAN);
-    printf("                              STAR CUP SYSTEM                                 ");
-    PrintSpace();
+    SetColor(COLOR_GREEN);
+    printf("  SERVICOS ATIVADOS: %d/%d\n", services_started, TOTAL_SERVICES);
+    SetColor(COLOR_DEFAULT);
+    
+    PrintSeparator();
+    
     SetColor(COLOR_GRAY);
-    printf("                              Copyright 2025-2030                             ");
-    PrintSpace();
+    printf("  PRESIONA CUALQUIER TECLA PARA SALIR...\n");
     SetColor(COLOR_DEFAULT);
 }
 
@@ -474,60 +412,41 @@ void ProcessServices(void) {
     PrintHeader();
     
     /* Install Sysmon first */
-    SetColor(COLOR_CYAN);
-    printf("                      VERIFICANDO E INSTALANDO COMPONENTES...                ");
-    PrintSpace();
-    SetColor(COLOR_DEFAULT);
-    
+    PrintSectionTitle("INSTALANDO COMPONENTES...");
     InstallSysmon();
-    
-    PrintSpace();
     
     /* Open Service Control Manager */
     hSCManager = OpenSCManagerWrapper();
 
     if (hSCManager == NULL) {
         SetColor(COLOR_RED);
-        printf("  [ERROR] No se pudo abrir el Administrador de Servicios.\n");
+        printf("  [ERRO] NO SE PUDO ABRIR EL ADMINISTRADOR DE SERVICIOS\n");
         SetColor(COLOR_DEFAULT);
         return;
     }
     
-    PrintSpace();
-    SetColor(COLOR_CYAN);
-    printf("                      CONFIGURANDO SERVICIOS PARA INICIO AUTOMATICO...       ");
-    PrintSpace();
-    PrintSpace();
-    SetColor(COLOR_DEFAULT);
-
+    PrintSectionTitle("CONFIGURANDO SERVICIOS PARA INICIO AUTOMATICO...");
+    
     for (int i = 0; i < TOTAL_SERVICES; i++) {
         configResult = SetServiceAutoStart(hSCManager, services[i]);
         if (configResult) {
             SetColor(COLOR_GREEN);
-            printf("  [OK] %-12s CONFIGURADO\n", services[i]);
+            printf("  [OK] %s CONFIGURADO\n", services[i]);
         } else {
             DWORD error = GetLastError();
             if (error == ERROR_SERVICE_DOES_NOT_EXIST) {
                 SetColor(COLOR_YELLOW);
-                printf("  [?] %-12s NO ENCONTRADO\n", services[i]);
+                printf("  [?] %s NAO ENCONTRADO\n", services[i]);
             } else {
                 SetColor(COLOR_GRAY);
-                printf("  [i] %-12s %lu\n", services[i], error);
+                printf("  [i] %s %lu\n", services[i], error);
             }
         }
         SetColor(COLOR_DEFAULT);
         SafeSleep(30);
     }
 
-    PrintSpace();
-    PrintSeparator();
-    PrintSpace();
-
-    SetColor(COLOR_CYAN);
-    printf("                              INICIANDO SERVICIOS...                          ");
-    PrintSpace();
-    PrintSpace();
-    SetColor(COLOR_DEFAULT);
+    PrintSectionTitle("INICIANDO SERVICIOS...");
 
     for (int i = 0; i < TOTAL_SERVICES; i++) {
         BOOL exists = ServiceExists(hSCManager, services[i]);
@@ -544,8 +463,18 @@ void ProcessServices(void) {
             }
         }
 
-        PrintServiceStatus(i + 1, services[i], service_display[i],
-                          service_desc[i], started, exists);
+        if (!exists) {
+            SetColor(COLOR_YELLOW);
+            printf("  [%-10s] %s NAO ENCONTRADO\n", "INFO", services[i]);
+            SetColor(COLOR_DEFAULT);
+            services_not_found++;
+        } else if (started) {
+            PrintServiceStatus(services[i], "ATIVADO", "ESTA ATIVADO!");
+            services_started++;
+        } else {
+            PrintServiceError(services[i], "NAO PUDO SER INICIADO");
+            services_failed++;
+        }
 
         SafeSleep(50);
     }
@@ -560,7 +489,7 @@ void ProcessServices(void) {
 /* ==================== ENTRY POINT ==================== */
 int main(int argc, char* argv[]) {
     hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-    SetConsoleTitleW(L"StarServices - Star Cup System");
+    SetConsoleTitleW(L"StarServices - ORG STAR CUP");
 
     if (!IsAdmin()) {
         PrintHeader();
@@ -569,11 +498,6 @@ int main(int argc, char* argv[]) {
     }
 
     ProcessServices();
-
-    PrintSpace();
-    SetColor(COLOR_GRAY);
-    printf("                      Presiona cualquier tecla para salir...                 ");
-    SetColor(COLOR_DEFAULT);
 
     FlushConsoleInputBuffer(GetStdHandle(STD_INPUT_HANDLE));
     getchar();
